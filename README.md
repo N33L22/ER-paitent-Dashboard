@@ -157,7 +157,7 @@ Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md)
 
 ## 📧 Contact
 
-For questions or collaboration opportunities, please open an issue or contact the development team.
+For questions or collaboration opportunities, please open an issue or contact me at neelkapadia22@gmail.com
 
 ---
 
