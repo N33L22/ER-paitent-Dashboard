@@ -1,0 +1,149 @@
+version: '3.8'
+
+services:
+  # ==========================================================================
+  # DATA SERVICE - Port 8001
+  # Handles data ingestion, feature engineering, and synthetic data generation
+  # ==========================================================================
+  data-service:
+    build:
+      context: ./services/data-service
+      dockerfile: Dockerfile
+    container_name: er-data-service
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - SERVICE_NAME=data-service
+      - LOG_LEVEL=INFO
+      - USE_SYNTHETIC_DATA=true
+      - SYNTHETIC_NUM_PATIENTS=50000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  # ==========================================================================
+  # ML SERVICE - Port 8002
+  # XGBoost LOS prediction, LSTM arrival forecasting, survival analysis
+  # ==========================================================================
+  ml-service:
+    build:
+      context: ./services/ml-service
+      dockerfile: Dockerfile
+    container_name: er-ml-service
+    ports:
+      - "8002:8000"
+    volumes:
+      - ./data/models:/app/models
+      - ./data/processed:/app/data/processed
+    environment:
+      - SERVICE_NAME=ml-service
+      - LOG_LEVEL=INFO
+      - DATA_SERVICE_URL=http://data-service:8000
+    depends_on:
+      data-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+
+  # ==========================================================================
+  # SIMULATION SERVICE - Port 8003
+  # SimPy discrete-event simulation, what-if scenarios, Monte Carlo
+  # ==========================================================================
+  simulation-service:
+    build:
+      context: ./services/simulation-service
+      dockerfile: Dockerfile
+    container_name: er-simulation-service
+    ports:
+      - "8003:8000"
+    volumes:
+      - ./data/synthetic:/app/data/synthetic
+    environment:
+      - SERVICE_NAME=simulation-service
+      - LOG_LEVEL=INFO
+      - DATA_SERVICE_URL=http://data-service:8000
+    depends_on:
+      data-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  # ==========================================================================
+  # ANALYTICS SERVICE - Port 8004
+  # Granger causality, network flow, anomaly detection, bias auditing
+  # ==========================================================================
+  analytics-service:
+    build:
+      context: ./services/analytics-service
+      dockerfile: Dockerfile
+    container_name: er-analytics-service
+    ports:
+      - "8004:8000"
+    environment:
+      - SERVICE_NAME=analytics-service
+      - LOG_LEVEL=INFO
+      - DATA_SERVICE_URL=http://data-service:8000
+    depends_on:
+      data-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  # ==========================================================================
+  # STREAMLIT FRONTEND - Port 8501
+  # Interactive dashboard with 4 main views
+  # ==========================================================================
+  streamlit-frontend:
+    build:
+      context: ./frontend/streamlit-app
+      dockerfile: Dockerfile
+    container_name: er-frontend
+    ports:
+      - "8501:8501"
+    environment:
+      - DATA_SERVICE_URL=http://data-service:8000
+      - ML_SERVICE_URL=http://ml-service:8000
+      - SIMULATION_SERVICE_URL=http://simulation-service:8000
+      - ANALYTICS_SERVICE_URL=http://analytics-service:8000
+    depends_on:
+      - data-service
+      - ml-service
+      - simulation-service
+      - analytics-service
+    restart: unless-stopped
+
+# ==========================================================================
+# VOLUMES
+# ==========================================================================
+volumes:
+  data-volume:
+    driver: local
+
+# ==========================================================================
+# NETWORKS
+# ==========================================================================
+networks:
+  default:
+    name: er-platform-network
+    driver: bridge
